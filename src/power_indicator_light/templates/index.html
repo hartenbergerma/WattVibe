@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Trainer Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.js"></script>
+  <style>
+    :root { --bg: #f1f5f9; --card: #ffffff; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; margin: 0; }
+    .card { background: var(--card); width: 100%; max-width: 500px; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    h1 { font-size: 1.3rem; margin: 0 0 15px 0; color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f8fafc; }
+    .label { color: #64748b; text-transform: capitalize; font-size: 0.9rem; }
+    .val { font-weight: 700; font-family: monospace; }
+    .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
+    .true { background: #dcfce7; color: #15803d; }
+    .false { background: #fee2e2; color: #b91c1c; }
+    .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #ddd; display: inline-block; vertical-align: middle; margin-right: 8px; }
+    .chart-container { margin-top: 20px; height: 200px; width: 100%; position: relative; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Trainer Status</h1>
+    <div id="dashboard">Lade...</div>
+    <div class="chart-container">
+      <canvas id="powerChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    let powerData = Array(40).fill(0);
+    let colorData = Array(40).fill('rgba(200, 200, 200, 0.5)');
+    let myChart = null;
+
+    function getHSL(val) {
+      if (!Array.isArray(val) || val.length < 2) return 'hsl(0, 0%, 80%)';
+      const h = Math.round(val[0]);
+      const s = Math.round(val[1] * 100);
+      return `hsl(${h}, ${s}%, 50%)`;
+    }
+
+    function setupChart() {
+      const ctx = document.getElementById('powerChart').getContext('2d');
+      myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Array(40).fill(''),
+          datasets: [{
+            data: powerData,
+            backgroundColor: colorData,
+            borderRadius: 5,
+            barPercentage: 0.8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: { 
+            y: { 
+                beginAtZero: true,
+                suggestedMax: 300,
+                title: { display: true, text: 'Watt', font: { size: 10 } } 
+            },
+            x: { 
+                display: true, // Achse einschalten
+                grid: { display: false },
+                ticks: {
+                    callback: function(value, index, ticks) {
+                        return index-39 + "s";
+                    },
+                    font: { size: 10 },
+                    color: '#64748b'
+                }
+            } 
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    async function update() {
+      try {
+        const res = await fetch('/status');
+        const data = await res.json();
+        
+        document.getElementById('dashboard').innerHTML = Object.entries(data).map(([k, v]) => `
+          <div class="stat-row">
+            <span class="label">${k.replace(/_/g, ' ')}</span>
+            <span class="val">${
+              k === 'light_color' ? `<span class="swatch" style="background:${getHSL(v)}"></span>` : 
+              typeof v === 'boolean' ? `<span class="badge ${v}">${v ? 'ON' : 'OFF'}</span>` : 
+              (v ?? '--')
+            }</span>
+          </div>
+        `).join('');
+
+        if (myChart) {
+          powerData.push(parseFloat(data.trainer_power) || 0);
+          powerData.shift();
+          colorData.push(getHSL(data.light_color));
+          colorData.shift();
+          myChart.update('none');
+        }
+      } catch (e) { console.error("Update Error:", e); }
+    }
+
+    window.onload = () => {
+      setupChart();
+      setInterval(update, 1000);
+    };
+  </script>
+</body>
+</html>
