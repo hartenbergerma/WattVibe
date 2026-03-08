@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 from typing import Callable, Tuple
 from bleak import BleakClient, BleakScanner, BLEDevice
@@ -16,15 +17,32 @@ def parse_ftsm_bike_data(data: bytes) -> Tuple[float, float, int]:
     cadence = cadence_raw * 0.5
     power = power_raw
     
+    logging.debug(f"Parsed data - Speed: {speed} km/h, Cadence: {cadence} rpm, Power: {power} W")
     return speed, cadence, power
 
 class PowerTracker:
-    def __init__(self, callback: Callable[[int], None] = None, device_address: str = None):
-        self.callback = callback
+    def __init__(
+            self, 
+            power_callback: Callable[[int], None] = None,
+            connected_callback: Callable[[bool], None] = None,
+            device_address: str = None, 
+            log_level: str = "INFO",
+            log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        ):
+        self.power_callback = power_callback
+        self.connected_callback = connected_callback
         self.device_address = device_address
         self._thread = None
         self._loop = None
         self._stop_event = None
+        
+        self._logger = logging.getLogger(__name__)
+        handler = logging.StreamHandler() # oder FileHandler
+        formatter = logging.Formatter(log_format)
+        handler.setFormatter(formatter)
+        
+        self._logger.addHandler(handler)
+        self._logger.setLevel(log_level.upper())
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -41,17 +59,17 @@ class PowerTracker:
 
     async def _connect(self) -> BLEDevice:
         """Sucht das Gerät, solange bis es gefunden wird oder der Stop-Event feuert."""
-        print("Searching for device...")
+        logging.debug("Searching for device...")
         while not self._stop_event.is_set():
             try:
                 device = await BleakScanner.find_device_by_address(self.device_address, timeout=5.0)
                 if device:
-                    print(f"Found device: {device.address}")
+                    self._logger.info(f"Found device: {device.address}")
                     # kurze Pause, um Scanner-Ressourcen freizugeben
                     await asyncio.sleep(1.0) 
                     return device
             except Exception as e:
-                print(f"Scanner error: {e}")
+                self._logger.error(f"Scanner error: {e}")
             
             await asyncio.sleep(1.0)
         return None
@@ -59,8 +77,9 @@ class PowerTracker:
     async def _listen(self, device: BLEDevice):
         try:
             async with BleakClient(device) as client:
-                set_trainer_connected(True)
-                print(f"Connected to {device.address}")
+                if self.connected_callback:
+                    self.connected_callback(True)
+                self._logger.debug(f"Connected to {device.address}")
                 await client.start_notify(FTMS_BIKE_DATA_UUID, self._notification_handler)
                 
                 # Warten bis Disconnect oder Stop
@@ -70,7 +89,7 @@ class PowerTracker:
                 if client.is_connected:
                     await client.disconnect()
         except Exception as e:
-            print(f"Connection error: {e}")
+            self._logger.error(f"Connection error: {e}")
 
     async def _run_loop(self):
         self._stop_event = asyncio.Event()
@@ -78,7 +97,9 @@ class PowerTracker:
             device = await self._connect()
             if device and not self._stop_event.is_set():
                 await self._listen(device)
-                print("Device got disconnected")
+                self._logger.info("Device got disconnected")
+            if self.connected_callback:
+                self.connected_callback(False)
             set_trainer_connected(False)
             set_trainer_power(0)
             if not self._stop_event.is_set():
@@ -88,12 +109,13 @@ class PowerTracker:
         try:
             _, _, power = parse_ftsm_bike_data(data)
             
-            if power is not None and self.callback:
+            if power is not None and self.power_callback:
                 set_trainer_power(power)
+                self._logger.debug(f"Calling callback with power: {power}")
                 if self._loop:
-                    self._loop.call_soon_threadsafe(self.callback, power)
+                    self._loop.call_soon_threadsafe(self.power_callback, power)
         except Exception as e:
-            print(f"Handler error: {e}")
+            self._logger.error(f"Handler error: {e}")
 
     def _thread_main(self):
         self._loop = asyncio.new_event_loop()
@@ -109,7 +131,14 @@ if __name__ == "__main__":
     def print_power(p):
         print(f"Callback got power: {p}")
 
-    tracker = PowerTracker(callback=print_power, device_address="DD:FB:7B:77:1F:EF")
+    def print_connected(connected: bool):
+        print(f"New connection state: {connected}")
+
+    tracker = PowerTracker(
+        power_callback=print_power,
+        connected_callback=print_connected,
+        device_address="DD:FB:7B:77:1F:EF"
+    )
     tracker.start()
     print("Press Ctrl+C to stop")
     try:
