@@ -11,6 +11,7 @@ from pydantic import Field
 
 class Settings(BaseSettings):
     ftp: int = Field(default=300, description="Aktuelle FTP in Watt")
+    trainer_address: str = Field(..., description="Bluetooth-Adresse des Trainers")
     hub_ip: str = Field(..., alias="HUB_IP")
     hub_token: str = Field(..., alias="HUB_TOKEN")
     light_name: str = Field(default="Trainer", alias="LIGHT_NAME", description="Name des Lichts in der Dirigera App")
@@ -18,7 +19,6 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_format: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s", alias="LOG_FORMAT")
 
-    # Konfiguration für das Laden der .env Datei
     model_config = SettingsConfigDict(
         env_file=".env", 
         env_file_encoding="utf-8",
@@ -58,7 +58,7 @@ class SystemManager:
             self.tracker = ChosenTracker(
                 power_callback=self.controller.update_light_color,
                 connected_callback=self.controller.update_connection_status,
-                device_address="DD:FB:7B:77:1F:EF",
+                device_address=self.settings.trainer_address,
                 log_level=self.settings.log_level,
                 log_format=self.settings.log_format
             )
@@ -92,11 +92,9 @@ def start():
 
     settings = Settings()
     
-    # Initialize the manager
     manager = SystemManager(settings, args)
     manager.start_workers()
 
-    # Pass the manager to the WebServer
     web_server = WebServer(settings.web_port, restart_callback=manager.restart)
     web_server.start()
 
