@@ -40,12 +40,16 @@
     }
 
     h1 { 
-      font-size: 1.4rem; 
+      font-size: 1.6rem; 
       margin: 0 0 20px 0; 
-      color: var(--text-main); 
-      border-bottom: 1px solid var(--border); 
+      color: #FF00FF; /* Hot Magenta */
+      border-bottom: 2px solid #FF00FF; 
       padding-bottom: 12px; 
       text-align: center;
+      text-shadow:
+               0 0 3px #ddd, 
+               0 0 10px #FF00FF;
+      letter-spacing: 2px;
     }
 
     .stat-row { 
@@ -81,7 +85,7 @@
     #svg-container svg { width: 100%; height: auto; }
 
     /* SVG Overrides */
-    .status-active, .status-active path { fill: #22c55e !important; } /* Brighter green for dark mode */
+    .status-active, .status-active path { fill: #39FF14 !important; } /* Brighter green for dark mode */
     .status-inactive, .status-inactive path { fill: #475569 !important; }
     .light-off, .light-off path { fill: #475569 !important; }
     #mask { fill: var(--card) !important; } /* Match mask to card color */
@@ -167,10 +171,14 @@
 
     async function loadSVG() {
       try {
-        // Change this line in your loadSVG function:
         const response = await fetch('{{ url_for("static", filename="icon.svg") }}');
         const svgText = await response.text();
-        document.getElementById('svg-container').innerHTML = svgText;
+        const container = document.getElementById('svg-container');
+        container.innerHTML = svgText;
+        
+        // Trigger an immediate update once the SVG is in the DOM
+        // This prevents the SVG from being empty for the first 1-second interval
+        update(initialData); 
       } catch (e) { console.error("SVG Load Error:", e); }
     }
 

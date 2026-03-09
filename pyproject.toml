@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-start-app = "wattvibe.main:start"
+start-wattvibe = "wattvibe.main:start"
 
 [tool.uv]
 package = true

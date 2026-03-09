@@ -1,4 +1,4 @@
-# WattVibe
+# <img src="src/wattvibe/static/icon.svg" alt="WattVibe Logo" width="100"/> &nbsp; WattVibe 
 
 # Setup
 1. Installation: From the project root run
